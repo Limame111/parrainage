@@ -1,0 +1,31 @@
+<div class="landing-container">
+  <div class="landing-particles">
+    <div class="particle particle-1"></div>
+    <div class="particle particle-2"></div>
+    <div class="particle particle-3"></div>
+    <div class="particle particle-4"></div>
+    <div class="particle particle-5"></div>
+  </div>
+  
+  <div class="landing-content">
+    <h1 class="landing-title">
+      Journée d'Intégration
+      <span class="highlight">Section Informatique</span>
+    </h1>
+    
+    <p class="landing-subtitle">
+      Système de parrainage automatique
+      <br>
+      <span class="mono">L1 ↔ L2</span>
+    </p>
+    
+    <button 
+      class="btn-primary landing-button"
+      (click)="navigateToMain()"
+      [disabled]="isAnimating"
+      type="button">
+      <span class="button-text">🚀 Lancer le Parrainage</span>
+      <span class="button-glow"></span>
+    </button>
+  </div>
+</div>

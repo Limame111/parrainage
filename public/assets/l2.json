@@ -1,0 +1,22 @@
+[
+  { "id": 1, "nom": "Ahmed El Fassi", "sexe": "M" },
+  { "id": 2, "nom": "Sanae Benali", "sexe": "F" },
+  { "id": 3, "nom": "Othmane Alami", "sexe": "M" },
+  { "id": 4, "nom": "Hafsa Khadija", "sexe": "F" },
+  { "id": 5, "nom": "Younes Bensaid", "sexe": "M" },
+  { "id": 6, "nom": "Imane Mansouri", "sexe": "F" },
+  { "id": 7, "nom": "Tarik Tazi", "sexe": "M" },
+  { "id": 8, "nom": "Nada Idrissi", "sexe": "F" },
+  { "id": 9, "nom": "Hamza Alaoui", "sexe": "M" },
+  { "id": 10, "nom": "Rim El Houda", "sexe": "F" },
+  { "id": 11, "nom": "Mehdi Berrada", "sexe": "M" },
+  { "id": 12, "nom": "Salma Amrani", "sexe": "F" },
+  { "id": 13, "nom": "Ayoub Chraibi", "sexe": "M" },
+  { "id": 14, "nom": "Lina El Fassi", "sexe": "F" },
+  { "id": 15, "nom": "Anass El Ouazzani", "sexe": "M" },
+  { "id": 16, "nom": "Hind Benjelloun", "sexe": "F" },
+  { "id": 17, "nom": "Walid Tazi", "sexe": "M" },
+  { "id": 18, "nom": "Soukaina Alaoui", "sexe": "F" },
+  { "id": 19, "nom": "Youssef Benslimane", "sexe": "M" },
+  { "id": 20, "nom": "Mariam El Amrani", "sexe": "F" }
+]

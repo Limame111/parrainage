@@ -1,0 +1,22 @@
+[
+  { "id": 1, "nom": "Amine Benali", "sexe": "M" },
+  { "id": 2, "nom": "Sara Khadija", "sexe": "F" },
+  { "id": 3, "nom": "Youssef Alami", "sexe": "M" },
+  { "id": 4, "nom": "Fatima Zahra", "sexe": "F" },
+  { "id": 5, "nom": "Mehdi Bensaid", "sexe": "M" },
+  { "id": 6, "nom": "Aicha Mansouri", "sexe": "F" },
+  { "id": 7, "nom": "Omar Tazi", "sexe": "M" },
+  { "id": 8, "nom": "Layla Idrissi", "sexe": "F" },
+  { "id": 9, "nom": "Karim Alaoui", "sexe": "M" },
+  { "id": 10, "nom": "Nour El Houda", "sexe": "F" },
+  { "id": 11, "nom": "Hassan Berrada", "sexe": "M" },
+  { "id": 12, "nom": "Salma Amrani", "sexe": "F" },
+  { "id": 13, "nom": "Bilal Chraibi", "sexe": "M" },
+  { "id": 14, "nom": "Imane El Fassi", "sexe": "F" },
+  { "id": 15, "nom": "Anas El Ouazzani", "sexe": "M" },
+  { "id": 16, "nom": "Hiba Benjelloun", "sexe": "F" },
+  { "id": 17, "nom": "Reda Tazi", "sexe": "M" },
+  { "id": 18, "nom": "Zineb Alaoui", "sexe": "F" },
+  { "id": 19, "nom": "Yassine Benslimane", "sexe": "M" },
+  { "id": 20, "nom": "Meryem El Amrani", "sexe": "F" }
+]

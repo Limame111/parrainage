@@ -1,0 +1,215 @@
+<div class="main-container">
+  <!-- Loading State -->
+  <div class="loading-overlay" *ngIf="isLoading()">
+    <div class="loading-spinner">
+      <div class="spinner-ring"></div>
+      <div class="spinner-ring"></div>
+      <div class="spinner-ring"></div>
+    </div>
+    <p class="loading-text">Chargement des données...</p>
+  </div>
+
+  <!-- Suspense Overlay -->
+  <div class="suspense-overlay" *ngIf="isProcessing() && !isLoading()">
+    <div class="suspense-content">
+      <div class="suspense-icon">⚡</div>
+      <h2 class="suspense-title">Attribution en cours...</h2>
+      <p class="suspense-subtitle">Préparation des parrainages</p>
+    </div>
+  </div>
+
+  <!-- Main Content -->
+  <div class="content-wrapper" *ngIf="!isLoading()">
+    <div class="header">
+      <h1 class="text-gradient">Parrainage Automatique</h1>
+      <p class="subtitle">Section Informatique - L1 ↔ L2</p>
+    </div>
+
+    <!-- Zone de lancement -->
+    <div class="launch-section" *ngIf="!showResults()">
+      <div class="launch-container glass-card">
+        <div class="stats-grid">
+          <div class="stat-card">
+            <div class="stat-number">{{ filleuls().length }}</div>
+            <div class="stat-label">Filleuls (L1)</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-number">{{ parrains().length }}</div>
+            <div class="stat-label">Parrains/Marraines (L2)</div>
+          </div>
+        </div>
+
+        <div class="action-section">
+          <button 
+            class="btn-primary launch-button"
+            (click)="launchParrainage()"
+            [disabled]="isProcessing() || filleuls().length === 0 || parrains().length === 0">
+            <span class="button-text">
+              <span *ngIf="!isProcessing()">🚀 Lancer le Parrainage</span>
+              <span *ngIf="isProcessing()">⚙️ Traitement en cours...</span>
+            </span>
+            <span class="button-glow"></span>
+          </button>
+        </div>
+
+        <div class="error-message" *ngIf="errorMessage()">
+          <span class="error-icon">{{ errorMessage()?.startsWith('✅') ? '✅' : '⚠️' }}</span>
+          {{ errorMessage() }}
+        </div>
+      </div>
+    </div>
+
+    <!-- Zone de résultats avec animation cascade -->
+    <div class="results-section" *ngIf="showResults()">
+      <div class="results-header">
+        <div class="header-left">
+          <h2>Résultats du Parrainage</h2>
+          <p class="results-count">{{ getFilteredResults().length }} / {{ results().length }} résultat(s)</p>
+        </div>
+        <div class="header-actions">
+          <button class="btn-icon" (click)="toggleFullscreen()" title="Mode plein écran">
+            <span *ngIf="!isFullscreen()">⛶</span>
+            <span *ngIf="isFullscreen()">⛶</span>
+          </button>
+          <button class="btn-icon" (click)="toggleStatistics()" title="Statistiques">
+            📊
+          </button>
+          <button class="btn-icon" (click)="copyToClipboard()" title="Copier les résultats">
+            📋
+          </button>
+          <button class="btn-icon" (click)="downloadCSV()" title="Télécharger CSV">
+            💾
+          </button>
+          <button class="btn-secondary" (click)="reset()">
+            ↻ Nouveau
+          </button>
+        </div>
+      </div>
+
+      <!-- Barre de recherche -->
+      <div class="search-bar">
+        <div class="search-input-wrapper">
+          <span class="search-icon">🔍</span>
+          <input 
+            type="text" 
+            class="search-input"
+            placeholder="Rechercher un filleul ou un parrain..."
+            [value]="searchQuery()"
+            (input)="searchQuery.set($any($event.target).value)"
+            *ngIf="showResults()">
+        </div>
+      </div>
+
+      <!-- Statistiques -->
+      <div class="statistics-panel glass-card" *ngIf="showStatistics() && showResults()">
+        <h3>📊 Statistiques</h3>
+        <div class="stats-content">
+          <div class="stat-item">
+            <span class="stat-label">Total filleuls</span>
+            <span class="stat-value">{{ getStatistics().totalFilleuls }}</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Total parrains/marraines</span>
+            <span class="stat-value">{{ getStatistics().totalParrains }}</span>
+          </div>
+          <div class="parrains-distribution">
+            <h4>Répartition des parrainages</h4>
+            <div class="distribution-list">
+              <div 
+                *ngFor="let item of getStatistics().filleulsParParrain"
+                class="distribution-item">
+                <span class="parrain-stat-name">{{ item.nom }}</span>
+                <div class="stat-bar">
+                  <div 
+                    class="stat-bar-fill" 
+                    [style.width.%]="(item.count / getStatistics().totalFilleuls) * 100">
+                  </div>
+                </div>
+                <span class="stat-count">{{ item.count }} filleul{{ item.count > 1 ? 's' : '' }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="results-container">
+        <div 
+          *ngFor="let result of getFilteredResults(); let i = index"
+          class="result-card glass-card"
+          [attr.data-index]="i"
+          (click)="onCardClick(getRealIndex(result), $event)">
+          
+          <div class="card-header">
+            <div class="card-number">{{ getRealIndex(result) + 1 }}</div>
+          </div>
+
+          <div class="card-body">
+            <div class="filleul-section">
+              <div class="section-icon">👤</div>
+              <div class="section-content">
+                <span class="section-label">Filleul</span>
+                <h3 class="filleul-name">{{ result.filleul.nom }}</h3>
+              </div>
+            </div>
+
+            <div class="arrow-connector">
+              <div class="arrow-line"></div>
+              <div class="arrow-head">↓</div>
+            </div>
+
+            <div class="parrain-section">
+              <div class="section-icon">{{ result.parrain.sexe === 'F' ? '👩' : '👨' }}</div>
+              <div class="parrain-info">
+                <span class="section-label">{{ getParrainLabel(result.parrain.sexe) }}</span>
+                <h3 class="parrain-name">{{ result.parrain.nom }}</h3>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Message si aucun résultat trouvé -->
+        <div class="no-results" *ngIf="getFilteredResults().length === 0 && searchQuery()">
+          <p>🔍 Aucun résultat trouvé pour "{{ searchQuery() }}"</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Zoom -->
+  <div class="zoom-overlay" *ngIf="zoomedCardIndex() !== null" (click)="closeZoom($event)">
+    <div class="zoomed-card-container" (click)="onZoomedCardClick($event)">
+      <button class="close-zoom-btn" (click)="closeZoom($event)" aria-label="Fermer">
+        ✕
+      </button>
+      
+      <div class="zoomed-card glass-card" *ngIf="getZoomedCard() as zoomedResult">
+        <div class="zoomed-card-header">
+          <div class="zoomed-card-number">{{ (zoomedCardIndex() ?? 0) + 1 }}</div>
+        </div>
+
+        <div class="zoomed-card-body">
+          <div class="zoomed-filleul-section">
+            <div class="zoomed-section-icon">👤</div>
+            <div class="zoomed-section-content">
+              <span class="zoomed-section-label">Filleul</span>
+              <h2 class="zoomed-name">{{ zoomedResult.filleul.nom }}</h2>
+            </div>
+          </div>
+
+          <div class="zoomed-arrow-connector">
+            <div class="zoomed-arrow-line"></div>
+            <div class="zoomed-arrow-head">↓</div>
+          </div>
+
+          <div class="zoomed-parrain-section">
+            <div class="zoomed-section-icon">{{ zoomedResult.parrain.sexe === 'F' ? '👩' : '👨' }}</div>
+            <div class="zoomed-section-content">
+              <span class="zoomed-section-label">{{ getParrainLabel(zoomedResult.parrain.sexe) }}</span>
+              <h2 class="zoomed-name">{{ zoomedResult.parrain.nom }}</h2>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
