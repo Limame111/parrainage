@@ -386,10 +386,25 @@ export class MainComponent implements OnInit {
    */
   onCardClick(index: number, event: Event): void {
     event.stopPropagation();
-    console.log('Card clicked, index:', index);
-    this.zoomedCardIndex.set(index);
-    console.log('Zoomed card index set to:', this.zoomedCardIndex());
-    console.log('Zoomed card:', this.getZoomedCard());
+    
+    // Scroll instantané vers le haut AVANT d'afficher la carte
+    window.scrollTo(0, 0);
+    
+    // Empêcher le scroll du body pendant le zoom
+    document.body.style.overflow = 'hidden';
+    
+    // Attendre que le scroll soit effectué avant d'afficher la carte
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        this.zoomedCardIndex.set(index);
+        
+        // S'assurer que la carte est bien centrée après affichage
+        setTimeout(() => {
+          // Forcer le scroll vers le haut une dernière fois pour être sûr
+          window.scrollTo(0, 0);
+        }, 10);
+      });
+    });
   }
 
   /**
@@ -399,8 +414,10 @@ export class MainComponent implements OnInit {
     if (event) {
       event.stopPropagation();
     }
-    console.log('Closing zoom');
     this.zoomedCardIndex.set(null);
+    
+    // Réactiver le scroll du body
+    document.body.style.overflow = '';
   }
 
   /**

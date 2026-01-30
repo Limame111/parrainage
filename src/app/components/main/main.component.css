@@ -765,7 +765,7 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.25);
+  background: rgba(248, 250, 252, 0.15);
   backdrop-filter: blur(2px);
   z-index: 9999;
   display: flex;
@@ -776,6 +776,8 @@
   cursor: pointer;
   overflow-y: auto;
   pointer-events: auto;
+  /* Empêcher le scroll du body quand le zoom est actif */
+  overscroll-behavior: contain;
 }
 
 @keyframes fadeInOverlay {
@@ -788,24 +790,33 @@
 }
 
 .zoomed-card-container {
-  position: relative;
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
   max-width: 480px;
-  width: 100%;
-  max-height: 85vh;
+  width: calc(100% - 2 * var(--spacing-lg));
+  max-height: calc(100vh - 2 * var(--spacing-lg));
   cursor: default;
   z-index: 10000;
   animation: zoomInCard 0.3s ease-out;
   pointer-events: auto;
+  /* S'assurer que la carte reste visible même sur petits écrans */
+  overflow-y: auto;
+  /* Centrage parfait dans le viewport visible */
+  margin: 0;
+  /* Empêcher tout décalage */
+  will-change: transform;
 }
 
 @keyframes zoomInCard {
   from {
     opacity: 0;
-    transform: scale(0.9);
+    transform: translate(-50%, -50%) scale(0.9);
   }
   to {
     opacity: 1;
-    transform: scale(1);
+    transform: translate(-50%, -50%) scale(1);
   }
 }
 
@@ -851,6 +862,7 @@
   position: relative;
   overflow: hidden;
   min-height: 320px;
+  max-height: 90vh;
   display: flex;
   flex-direction: column;
   z-index: 10001;
@@ -858,6 +870,8 @@
   opacity: 1 !important;
   visibility: visible !important;
   transform: scale(1) !important;
+  /* S'assurer que la carte reste dans le viewport */
+  margin: auto;
 }
 
 .zoomed-card::before {
