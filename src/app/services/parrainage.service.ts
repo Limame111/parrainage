@@ -2,14 +2,8 @@ import { Injectable } from '@angular/core';
 import { Student } from './data-loader.service';
 
 export interface ParrainageResult {
-  filleul: {
-    nom: string;
-    sexe: 'M' | 'F';
-  };
-  parrain: {
-    nom: string;
-    sexe: 'M' | 'F';
-  };
+  filleul: Student;
+  parrain: Student;
 }
 
 @Injectable({
@@ -56,14 +50,8 @@ export class ParrainageService {
         if (count < 2) {
           // Assigner le parrain au filleul
           results.push({
-            filleul: {
-              nom: filleul.nom,
-              sexe: filleul.sexe
-            },
-            parrain: {
-              nom: parrain.nom,
-              sexe: parrain.sexe
-            }
+            filleul: filleul,
+            parrain: parrain
           });
 
           // Incrémenter le compteur du parrain
@@ -82,28 +70,16 @@ export class ParrainageService {
         if (availableParrain) {
           const count = parrainCounts.get(availableParrain.id) || 0;
           results.push({
-            filleul: {
-              nom: filleul.nom,
-              sexe: filleul.sexe
-            },
-            parrain: {
-              nom: availableParrain.nom,
-              sexe: availableParrain.sexe
-            }
+            filleul: filleul,
+            parrain: availableParrain
           });
           parrainCounts.set(availableParrain.id, count + 1);
         } else {
           // Fallback : utiliser le premier parrain même s'il a déjà 2 filleuls
           const fallbackParrain = shuffledParrains[0];
           results.push({
-            filleul: {
-              nom: filleul.nom,
-              sexe: filleul.sexe
-            },
-            parrain: {
-              nom: fallbackParrain.nom,
-              sexe: fallbackParrain.sexe
-            }
+            filleul: filleul,
+            parrain: fallbackParrain
           });
         }
       }

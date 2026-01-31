@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { gsap } from 'gsap';
 import { DataLoaderService, Student } from '../../services/data-loader.service';
 import { ParrainageService, ParrainageResult } from '../../services/parrainage.service';
+import { CsvParserService } from '../../services/csv-parser.service';
 
 @Component({
   selector: 'app-main',
@@ -15,6 +16,7 @@ import { ParrainageService, ParrainageResult } from '../../services/parrainage.s
 export class MainComponent implements OnInit {
   private dataLoader = inject(DataLoaderService);
   private parrainageService = inject(ParrainageService);
+  private csvParser = inject(CsvParserService);
 
   // État de l'application
   filleuls = signal<Student[]>([]);
@@ -29,6 +31,14 @@ export class MainComponent implements OnInit {
   showStatistics = signal(false);
   isFullscreen = signal(false);
   zoomedCardIndex = signal<number | null>(null);
+  zoomActive = signal<boolean>(false); // Indique si un zoom est actif
+
+  // État pour l'upload CSV
+  showUploadSection = signal(false);
+  uploadingL1 = signal(false);
+  uploadingL2 = signal(false);
+  l1FileName = signal<string>('');
+  l2FileName = signal<string>('');
 
   ngOnInit(): void {
     this.loadData();
@@ -248,6 +258,9 @@ export class MainComponent implements OnInit {
     this.searchQuery.set('');
     this.showStatistics.set(false);
     this.zoomedCardIndex.set(null);
+    this.zoomActive.set(false);
+    // Restaurer le scroll
+    document.body.style.overflow = '';
   }
 
   /**
@@ -385,26 +398,40 @@ export class MainComponent implements OnInit {
    * Gère le clic sur une carte pour le zoom
    */
   onCardClick(index: number, event: Event): void {
+    event.preventDefault();
     event.stopPropagation();
     
-    // Scroll instantané vers le haut AVANT d'afficher la carte
-    window.scrollTo(0, 0);
+    // Empêcher d'ouvrir plusieurs zooms en même temps
+    if (this.zoomActive()) {
+      return;
+    }
     
-    // Empêcher le scroll du body pendant le zoom
+    // Vérifier que l'index est valide
+    const results = this.results();
+    if (index < 0 || index >= results.length) {
+      console.error('Invalid index for zoom:', index, 'Total results:', results.length);
+      return;
+    }
+    
+    // Marquer le zoom comme actif
+    this.zoomActive.set(true);
+    
+    // Bloquer le scroll
     document.body.style.overflow = 'hidden';
     
-    // Attendre que le scroll soit effectué avant d'afficher la carte
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        this.zoomedCardIndex.set(index);
-        
-        // S'assurer que la carte est bien centrée après affichage
-        setTimeout(() => {
-          // Forcer le scroll vers le haut une dernière fois pour être sûr
-          window.scrollTo(0, 0);
-        }, 10);
-      });
-    });
+    // Scroll instantané vers le haut
+    window.scrollTo(0, 0);
+    
+    // Afficher la carte immédiatement
+    this.zoomedCardIndex.set(index);
+    
+    // S'assurer que la carte est visible après un court délai
+    setTimeout(() => {
+      const card = document.querySelector('.zoomed-card');
+      if (card) {
+        card.scrollIntoView({ behavior: 'instant', block: 'center', inline: 'center' });
+      }
+    }, 50);
   }
 
   /**
@@ -412,19 +439,16 @@ export class MainComponent implements OnInit {
    */
   closeZoom(event?: Event): void {
     if (event) {
+      event.preventDefault();
       event.stopPropagation();
     }
-    this.zoomedCardIndex.set(null);
     
-    // Réactiver le scroll du body
+    // Fermer le zoom
+    this.zoomedCardIndex.set(null);
+    this.zoomActive.set(false);
+    
+    // Restaurer le scroll
     document.body.style.overflow = '';
-  }
-
-  /**
-   * Empêche la propagation du clic sur la carte zoomée
-   */
-  onZoomedCardClick(event: Event): void {
-    event.stopPropagation();
   }
 
   /**
@@ -441,6 +465,94 @@ export class MainComponent implements OnInit {
    * Récupère l'index réel d'un résultat dans la liste complète
    */
   getRealIndex(result: ParrainageResult): number {
-    return this.results().indexOf(result);
+    const results = this.results();
+    const index = results.findIndex(r => 
+      r.filleul.id === result.filleul.id && 
+      r.parrain.id === result.parrain.id
+    );
+    return index >= 0 ? index : 0;
+  }
+
+  /**
+   * Toggle l'affichage de la section d'upload
+   */
+  toggleUploadSection(): void {
+    this.showUploadSection.set(!this.showUploadSection());
+  }
+
+  /**
+   * Gère l'upload du fichier CSV pour L1 (Filleuls)
+   */
+  async onL1FileSelected(event: Event): Promise<void> {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    
+    if (!file) return;
+
+    if (!file.name.toLowerCase().endsWith('.csv')) {
+      this.errorMessage.set('⚠️ Veuillez sélectionner un fichier CSV');
+      return;
+    }
+
+    this.uploadingL1.set(true);
+    this.l1FileName.set(file.name);
+    this.errorMessage.set(null);
+
+    try {
+      const students = await this.csvParser.parseCsvFile(file);
+      this.filleuls.set(students);
+      this.showSuccessMessage(`✅ ${students.length} filleul(s) chargé(s) depuis ${file.name}`);
+      
+      // Réinitialiser les résultats si le parrainage a déjà été fait
+      if (this.showResults()) {
+        this.reset();
+      }
+    } catch (error) {
+      this.errorMessage.set(
+        error instanceof Error ? error.message : 'Erreur lors du chargement du fichier L1'
+      );
+    } finally {
+      this.uploadingL1.set(false);
+      // Réinitialiser l'input pour permettre de recharger le même fichier
+      input.value = '';
+    }
+  }
+
+  /**
+   * Gère l'upload du fichier CSV pour L2 (Parrains)
+   */
+  async onL2FileSelected(event: Event): Promise<void> {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    
+    if (!file) return;
+
+    if (!file.name.toLowerCase().endsWith('.csv')) {
+      this.errorMessage.set('⚠️ Veuillez sélectionner un fichier CSV');
+      return;
+    }
+
+    this.uploadingL2.set(true);
+    this.l2FileName.set(file.name);
+    this.errorMessage.set(null);
+
+    try {
+      const students = await this.csvParser.parseCsvFile(file);
+      this.parrains.set(students);
+      this.showSuccessMessage(`✅ ${students.length} parrain(s)/marraine(s) chargé(s) depuis ${file.name}`);
+      
+      // Réinitialiser les résultats si le parrainage a déjà été fait
+      if (this.showResults()) {
+        this.reset();
+      }
+    } catch (error) {
+      this.errorMessage.set(
+        error instanceof Error ? error.message : 'Erreur lors du chargement du fichier L2'
+      );
+    } finally {
+      this.uploadingL2.set(false);
+      // Réinitialiser l'input pour permettre de recharger le même fichier
+      input.value = '';
+    }
   }
 }

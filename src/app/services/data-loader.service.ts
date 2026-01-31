@@ -6,6 +6,7 @@ export interface Student {
   id: number;
   nom: string;
   sexe: 'M' | 'F';
+  telephone?: string; // Optionnel pour compatibilité avec les fichiers JSON existants
 }
 
 @Injectable({

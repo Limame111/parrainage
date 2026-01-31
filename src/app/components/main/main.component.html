@@ -28,6 +28,52 @@
     <!-- Zone de lancement -->
     <div class="launch-section" *ngIf="!showResults()">
       <div class="launch-container glass-card">
+        <!-- Section d'upload CSV -->
+        <div class="upload-section" *ngIf="showUploadSection()">
+          <h3 class="upload-title">📁 Importer les listes depuis CSV</h3>
+          <p class="upload-subtitle">Format attendu : nom,prénom,téléphone (avec ou sans en-tête)</p>
+          
+          <div class="upload-grid">
+            <div class="upload-card">
+              <label class="upload-label">
+                <span class="upload-icon">📄</span>
+                <span class="upload-text">Filleuls (L1)</span>
+                <input 
+                  type="file" 
+                  accept=".csv"
+                  (change)="onL1FileSelected($event)"
+                  [disabled]="uploadingL1()"
+                  class="file-input"
+                  id="l1-file-input">
+                <div class="file-input-display">
+                  <span *ngIf="!l1FileName() && !uploadingL1()">Choisir un fichier CSV</span>
+                  <span *ngIf="uploadingL1()" class="uploading">⏳ Chargement...</span>
+                  <span *ngIf="l1FileName() && !uploadingL1()" class="file-name">{{ l1FileName() }}</span>
+                </div>
+              </label>
+            </div>
+
+            <div class="upload-card">
+              <label class="upload-label">
+                <span class="upload-icon">📄</span>
+                <span class="upload-text">Parrains/Marraines (L2)</span>
+                <input 
+                  type="file" 
+                  accept=".csv"
+                  (change)="onL2FileSelected($event)"
+                  [disabled]="uploadingL2()"
+                  class="file-input"
+                  id="l2-file-input">
+                <div class="file-input-display">
+                  <span *ngIf="!l2FileName() && !uploadingL2()">Choisir un fichier CSV</span>
+                  <span *ngIf="uploadingL2()" class="uploading">⏳ Chargement...</span>
+                  <span *ngIf="l2FileName() && !uploadingL2()" class="file-name">{{ l2FileName() }}</span>
+                </div>
+              </label>
+            </div>
+          </div>
+        </div>
+
         <div class="stats-grid">
           <div class="stat-card">
             <div class="stat-number">{{ filleuls().length }}</div>
@@ -40,6 +86,13 @@
         </div>
 
         <div class="action-section">
+          <button 
+            class="btn-secondary"
+            (click)="toggleUploadSection()"
+            style="margin-right: var(--spacing-md);">
+            <span *ngIf="!showUploadSection()">📁 Importer CSV</span>
+            <span *ngIf="showUploadSection()">✕ Masquer</span>
+          </button>
           <button 
             class="btn-primary launch-button"
             (click)="launchParrainage()"
@@ -162,6 +215,9 @@
               <div class="parrain-info">
                 <span class="section-label">{{ getParrainLabel(result.parrain.sexe) }}</span>
                 <h3 class="parrain-name">{{ result.parrain.nom }}</h3>
+                <p class="parrain-telephone" *ngIf="result.parrain.telephone">
+                  📞 {{ result.parrain.telephone }}
+                </p>
               </div>
             </div>
           </div>
@@ -176,37 +232,38 @@
   </div>
 
   <!-- Modal Zoom -->
-  <div class="zoom-overlay" *ngIf="zoomedCardIndex() !== null" (click)="closeZoom($event)">
-    <div class="zoomed-card-container" (click)="onZoomedCardClick($event)">
+  <div class="zoom-overlay" *ngIf="zoomedCardIndex() !== null && getZoomedCard() as zoomedResult" (click)="closeZoom($event)">
+    <div class="zoomed-card glass-card" (click)="$event.stopPropagation()">
       <button class="close-zoom-btn" (click)="closeZoom($event)" aria-label="Fermer">
         ✕
       </button>
       
-      <div class="zoomed-card glass-card" *ngIf="getZoomedCard() as zoomedResult">
-        <div class="zoomed-card-header">
-          <div class="zoomed-card-number">{{ (zoomedCardIndex() ?? 0) + 1 }}</div>
+      <div class="zoomed-card-header">
+        <div class="zoomed-card-number">{{ (zoomedCardIndex() ?? 0) + 1 }}</div>
+      </div>
+
+      <div class="zoomed-card-body">
+        <div class="zoomed-filleul-section">
+          <div class="zoomed-section-icon">👤</div>
+          <div class="zoomed-section-content">
+            <span class="zoomed-section-label">Filleul</span>
+            <h2 class="zoomed-name">{{ zoomedResult.filleul.nom }}</h2>
+          </div>
         </div>
 
-        <div class="zoomed-card-body">
-          <div class="zoomed-filleul-section">
-            <div class="zoomed-section-icon">👤</div>
-            <div class="zoomed-section-content">
-              <span class="zoomed-section-label">Filleul</span>
-              <h2 class="zoomed-name">{{ zoomedResult.filleul.nom }}</h2>
-            </div>
-          </div>
+        <div class="zoomed-arrow-connector">
+          <div class="zoomed-arrow-line"></div>
+          <div class="zoomed-arrow-head">↓</div>
+        </div>
 
-          <div class="zoomed-arrow-connector">
-            <div class="zoomed-arrow-line"></div>
-            <div class="zoomed-arrow-head">↓</div>
-          </div>
-
-          <div class="zoomed-parrain-section">
-            <div class="zoomed-section-icon">{{ zoomedResult.parrain.sexe === 'F' ? '👩' : '👨' }}</div>
-            <div class="zoomed-section-content">
-              <span class="zoomed-section-label">{{ getParrainLabel(zoomedResult.parrain.sexe) }}</span>
-              <h2 class="zoomed-name">{{ zoomedResult.parrain.nom }}</h2>
-            </div>
+        <div class="zoomed-parrain-section">
+          <div class="zoomed-section-icon">{{ zoomedResult.parrain.sexe === 'F' ? '👩' : '👨' }}</div>
+          <div class="zoomed-section-content">
+            <span class="zoomed-section-label">{{ getParrainLabel(zoomedResult.parrain.sexe) }}</span>
+            <h2 class="zoomed-name">{{ zoomedResult.parrain.nom }}</h2>
+            <p class="zoomed-telephone" *ngIf="zoomedResult.parrain.telephone">
+              📞 {{ zoomedResult.parrain.telephone }}
+            </p>
           </div>
         </div>
       </div>
