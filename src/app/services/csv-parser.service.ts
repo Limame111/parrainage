@@ -43,17 +43,22 @@ export class CsvParserService {
 
     const students: Student[] = [];
     let startIndex = 0;
+    let sexeColumnIndex = -1; // Index de la colonne Sexe si elle existe
 
-    // Vérifier si la première ligne est un en-tête
+    // Vérifier si la première ligne est un en-tête et détecter la colonne Sexe
     const firstLine = lines[0].toLowerCase();
-    if (firstLine.includes('nom') || firstLine.includes('prénom') || firstLine.includes('téléphone') || firstLine.includes('telephone')) {
+    if (firstLine.includes('nom') || firstLine.includes('prénom') || firstLine.includes('téléphone') || firstLine.includes('telephone') || firstLine.includes('sexe')) {
       startIndex = 1;
+      
+      // Trouver l'index de la colonne Sexe
+      const headerValues = this.parseLineValues(lines[0]);
+      sexeColumnIndex = headerValues.findIndex(h => h.toLowerCase() === 'sexe');
     }
 
     // Parser chaque ligne
     for (let i = startIndex; i < lines.length; i++) {
       const line = lines[i];
-      const student = this.parseCsvLine(line, i - startIndex + 1);
+      const student = this.parseCsvLine(line, i - startIndex + 1, sexeColumnIndex);
       if (student) {
         students.push(student);
       }
@@ -67,11 +72,9 @@ export class CsvParserService {
   }
 
   /**
-   * Parse une ligne CSV individuelle
-   * Format attendu : nom,prénom,téléphone
+   * Parse les valeurs d'une ligne CSV (gestion des guillemets et virgules)
    */
-  private parseCsvLine(line: string, id: number): Student | null {
-    // Gérer les guillemets et les virgules dans les valeurs
+  private parseLineValues(line: string): string[] {
     const values: string[] = [];
     let currentValue = '';
     let insideQuotes = false;
@@ -88,10 +91,19 @@ export class CsvParserService {
         currentValue += char;
       }
     }
-    values.push(currentValue.trim()); // Ajouter la dernière valeur
+    values.push(currentValue.trim());
 
     // Nettoyer les guillemets des valeurs
-    const cleanedValues = values.map(v => v.replace(/^"|"$/g, '').trim());
+    return values.map(v => v.replace(/^"|"$/g, '').trim());
+  }
+
+  /**
+   * Parse une ligne CSV individuelle
+   * Format attendu : nom,prénom,téléphone[,sexe]
+   * @param sexeColumnIndex Index de la colonne Sexe (-1 si non présente)
+   */
+  private parseCsvLine(line: string, id: number, sexeColumnIndex: number = -1): Student | null {
+    const cleanedValues = this.parseLineValues(line);
 
     if (cleanedValues.length < 2) {
       console.warn(`Ligne ${id} ignorée : format invalide (${line})`);
@@ -110,9 +122,15 @@ export class CsvParserService {
       return null;
     }
 
-    // Déterminer le sexe basé sur le prénom (approximation simple)
-    // On peut améliorer cela avec une liste de prénoms ou laisser l'utilisateur le spécifier
-    const sexe = this.detectSexe(prenom);
+    // Déterminer le sexe : priorité à la colonne CSV si elle existe
+    let sexe: 'M' | 'F';
+    if (sexeColumnIndex >= 0 && cleanedValues[sexeColumnIndex]) {
+      const sexeValue = cleanedValues[sexeColumnIndex].toUpperCase();
+      sexe = (sexeValue === 'F' || sexeValue === 'FEMININ' || sexeValue === 'FÉMININ' || sexeValue === 'FEMME') ? 'F' : 'M';
+    } else {
+      // Fallback : détection par prénom
+      sexe = this.detectSexe(prenom);
+    }
 
     return {
       id: id,
@@ -124,15 +142,21 @@ export class CsvParserService {
 
   /**
    * Détecte le sexe basé sur le prénom (approximation simple)
-   * Peut être amélioré avec une liste de prénoms ou un champ dans le CSV
+   * Utilisé uniquement si la colonne Sexe n'est pas présente dans le CSV
    */
   private detectSexe(prenom: string): 'M' | 'F' {
     const prenomLower = prenom.toLowerCase();
     
-    // Liste de prénoms féminins courants (peut être étendue)
+    // Liste de prénoms féminins courants (maghrébins, français et sénégalais)
     const prenomsFeminins = [
+      // Prénoms maghrébins
       'sara', 'fatima', 'amina', 'aicha', 'khadija', 'zineb', 'salma', 'nadia',
-      'marie', 'sophie', 'emilie', 'julie', 'laura', 'clara', 'lisa', 'anna'
+      // Prénoms français
+      'marie', 'sophie', 'emilie', 'julie', 'laura', 'clara', 'lisa', 'anna',
+      // Prénoms sénégalais
+      'fatou', 'awa', 'khoudia', 'daba', 'soda', 'marieme', 'fatim', 'aminata',
+      'coumba', 'ndèye', 'ndeye', 'astou', 'mame', 'rokhaya', 'sokhna', 'bineta',
+      'khady', 'ndiaye', 'aissatou', 'oumou', 'adja', 'mariama', 'seynabou', 'yacine'
     ];
 
     if (prenomsFeminins.some(p => prenomLower.includes(p))) {
