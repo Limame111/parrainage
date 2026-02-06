@@ -1,4 +1,4 @@
-import { Component, OnInit, signal, inject } from '@angular/core';
+import { Component, OnInit, signal, computed, inject, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { gsap } from 'gsap';
@@ -17,6 +17,7 @@ export class MainComponent implements OnInit {
   private dataLoader = inject(DataLoaderService);
   private parrainageService = inject(ParrainageService);
   private csvParser = inject(CsvParserService);
+  private cdr = inject(ChangeDetectorRef);
 
   // État de l'application
   filleuls = signal<Student[]>([]);
@@ -28,6 +29,7 @@ export class MainComponent implements OnInit {
   isLoading = signal(true);
   errorMessage = signal<string | null>(null);
   searchQuery = signal<string>('');
+  filteredResults = computed(() => this.computeFilteredResults());
   showStatistics = signal(false);
   isFullscreen = signal(false);
   zoomedCardIndex = signal<number | null>(null);
@@ -271,18 +273,54 @@ export class MainComponent implements OnInit {
   }
 
   /**
-   * Filtre les résultats selon la recherche
+   * Normalise une chaîne pour la recherche (insensible aux accents)
    */
-  getFilteredResults(): ParrainageResult[] {
-    const query = this.searchQuery().toLowerCase().trim();
-    if (!query) {
-      return this.results();
-    }
-    
-    return this.results().filter(result => 
-      result.filleul.nom.toLowerCase().includes(query) ||
-      result.parrain.nom.toLowerCase().includes(query)
+  private normalizeForSearch(str: string): string {
+    return str
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .trim();
+  }
+
+  /**
+   * Carte impliquant Ndeye Fatou Sall, Khoudia Manga Dieye ou Karine Touré (à afficher en fin de liste)
+   */
+  private isMarraineSpecial(result: ParrainageResult): boolean {
+    const n = this.normalizeForSearch;
+    const p = result.parrain.nom;
+    return (
+      (n(p).includes('ndeye fatou') && n(p).includes('sall')) ||
+      (n(p).includes('khoudia') && n(p).includes('manga')) ||
+      (n(p).includes('karine') && n(p).includes('toure'))
     );
+  }
+
+  /**
+   * Calcule les résultats filtrés et triés (utilisé par le computed)
+   */
+  private computeFilteredResults(): ParrainageResult[] {
+    const query = this.normalizeForSearch(this.searchQuery());
+    const results = this.results();
+
+    const filtered = query
+      ? results.filter(result =>
+          this.normalizeForSearch(result.filleul.nom).includes(query) ||
+          this.normalizeForSearch(result.parrain.nom).includes(query)
+        )
+      : results;
+
+    return [...filtered].sort((a, b) => {
+      const aSpecial = this.isMarraineSpecial(a);
+      const bSpecial = this.isMarraineSpecial(b);
+      if (aSpecial && !bSpecial) return 1;   // a en fin
+      if (!aSpecial && bSpecial) return -1;  // b en fin
+      return a.filleul.nom.localeCompare(b.filleul.nom, 'fr');
+    });
+  }
+
+  getFilteredResults(): ParrainageResult[] {
+    return this.filteredResults();
   }
 
   /**
@@ -395,6 +433,26 @@ export class MainComponent implements OnInit {
   }
 
   /**
+   * Gère la saisie dans la barre de recherche
+   */
+  onSearchInput(event: Event): void {
+    const value = (event.target as HTMLInputElement)?.value ?? '';
+    this.searchQuery.set(value);
+  }
+
+  /**
+   * Efface la recherche et affiche toute la liste
+   */
+  clearSearch(): void {
+    this.searchQuery.set('');
+    this.cdr.detectChanges();
+    setTimeout(() => {
+      const container = document.querySelector('.results-container');
+      if (container) container.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 50);
+  }
+
+  /**
    * Gère le clic sur une carte pour le zoom
    */
   onCardClick(index: number, event: Event): void {
@@ -489,8 +547,8 @@ export class MainComponent implements OnInit {
     
     if (!file) return;
 
-    if (!file.name.toLowerCase().endsWith('.csv')) {
-      this.errorMessage.set('⚠️ Veuillez sélectionner un fichier CSV');
+    if (!file.name.toLowerCase().endsWith('.csv') && !file.name.toLowerCase().endsWith('.txt')) {
+      this.errorMessage.set('⚠️ Veuillez sélectionner un fichier CSV ou TXT');
       return;
     }
 
@@ -527,8 +585,8 @@ export class MainComponent implements OnInit {
     
     if (!file) return;
 
-    if (!file.name.toLowerCase().endsWith('.csv')) {
-      this.errorMessage.set('⚠️ Veuillez sélectionner un fichier CSV');
+    if (!file.name.toLowerCase().endsWith('.csv') && !file.name.toLowerCase().endsWith('.txt')) {
+      this.errorMessage.set('⚠️ Veuillez sélectionner un fichier CSV ou TXT');
       return;
     }
 

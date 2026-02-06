@@ -40,7 +40,7 @@
                 <span class="upload-text">Filleuls (L1)</span>
                 <input 
                   type="file" 
-                  accept=".csv"
+                  accept=".csv,.txt,text/csv,text/plain"
                   (change)="onL1FileSelected($event)"
                   [disabled]="uploadingL1()"
                   class="file-input"
@@ -59,7 +59,7 @@
                 <span class="upload-text">Parrains/Marraines (L2)</span>
                 <input 
                   type="file" 
-                  accept=".csv"
+                  accept=".csv,.txt,text/csv,text/plain"
                   (change)="onL2FileSelected($event)"
                   [disabled]="uploadingL2()"
                   class="file-input"
@@ -117,7 +117,7 @@
       <div class="results-header">
         <div class="header-left">
           <h2>Résultats du Parrainage</h2>
-          <p class="results-count">{{ getFilteredResults().length }} / {{ results().length }} résultat(s)</p>
+          <p class="results-count">{{ filteredResults().length }} / {{ results().length }} résultat(s)</p>
         </div>
         <div class="header-actions">
           <button class="btn-icon" (click)="toggleFullscreen()" title="Mode plein écran">
@@ -146,10 +146,17 @@
           <input 
             type="text" 
             class="search-input"
-            placeholder="Rechercher un filleul ou un parrain..."
+            placeholder="Rechercher par nom ou prénom..."
             [value]="searchQuery()"
-            (input)="searchQuery.set($any($event.target).value)"
+            (input)="onSearchInput($event)"
             *ngIf="showResults()">
+          <button 
+            *ngIf="searchQuery()" 
+            class="search-clear-btn"
+            (click)="clearSearch()"
+            title="Effacer la recherche et afficher toute la liste">
+            ✕
+          </button>
         </div>
       </div>
 
@@ -187,13 +194,13 @@
 
       <div class="results-container">
         <div 
-          *ngFor="let result of getFilteredResults(); let i = index"
+          *ngFor="let result of filteredResults(); let i = index"
           class="result-card glass-card"
           [attr.data-index]="i"
           (click)="onCardClick(getRealIndex(result), $event)">
           
           <div class="card-header">
-            <div class="card-number">{{ getRealIndex(result) + 1 }}</div>
+            <div class="card-number">{{ i + 1 }}</div>
           </div>
 
           <div class="card-body">
@@ -224,7 +231,7 @@
         </div>
 
         <!-- Message si aucun résultat trouvé -->
-        <div class="no-results" *ngIf="getFilteredResults().length === 0 && searchQuery()">
+        <div class="no-results" *ngIf="filteredResults().length === 0 && searchQuery()">
           <p>🔍 Aucun résultat trouvé pour "{{ searchQuery() }}"</p>
         </div>
       </div>

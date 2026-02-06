@@ -1,13 +1,15 @@
 import { Injectable } from '@angular/core';
 import { Student } from './data-loader.service';
 
+type Delimiter = ',' | ';' | '\t';
+
 @Injectable({
   providedIn: 'root'
 })
 export class CsvParserService {
   /**
    * Parse un fichier CSV et retourne un tableau d'étudiants
-   * Format attendu : nom,prénom,téléphone (avec ou sans en-tête)
+   * Accepte tous les formats : virgule, point-virgule, tabulation, différentes structures
    */
   async parseCsvFile(file: File): Promise<Student[]> {
     return new Promise((resolve, reject) => {
@@ -15,7 +17,8 @@ export class CsvParserService {
 
       reader.onload = (e: ProgressEvent<FileReader>) => {
         try {
-          const text = e.target?.result as string;
+          let text = (e.target?.result as string) || '';
+          if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
           const students = this.parseCsvText(text);
           resolve(students);
         } catch (error) {
@@ -32,33 +35,123 @@ export class CsvParserService {
   }
 
   /**
+   * Détecte le délimiteur CSV (virgule, point-virgule ou tabulation)
+   */
+  private detectDelimiter(line: string): Delimiter {
+    const counts = {
+      ',': (line.match(/,/g) || []).length,
+      ';': (line.match(/;/g) || []).length,
+      '\t': (line.match(/\t/g) || []).length
+    };
+    const max = Math.max(counts[','], counts[';'], counts['\t']);
+    if (max === 0) return ',';
+    if (counts[';'] === max) return ';';
+    if (counts['\t'] === max) return '\t';
+    return ',';
+  }
+
+  /**
+   * Parse les valeurs d'une ligne avec le délimiteur donné
+   */
+  private parseLineValues(line: string, delimiter: Delimiter): string[] {
+    const values: string[] = [];
+    let currentValue = '';
+    let insideQuotes = false;
+
+    for (let i = 0; i < line.length; i++) {
+      const char = line[i];
+
+      if (char === '"') {
+        insideQuotes = !insideQuotes;
+      } else if (char === delimiter && !insideQuotes) {
+        values.push(currentValue.trim());
+        currentValue = '';
+      } else {
+        currentValue += char;
+      }
+    }
+    values.push(currentValue.trim());
+
+    return values.map(v => v.replace(/^"|"$/g, '').trim());
+  }
+
+  /**
+   * Normalise un en-tête pour la comparaison (accents, casse)
+   */
+  private normalizeHeader(h: string): string {
+    return h
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .trim();
+  }
+
+  /**
+   * Trouve l'index d'une colonne par son nom (flexible)
+   */
+  private findColumnIndex(headers: string[], names: string[]): number {
+    return headers.findIndex(h => {
+      const n = this.normalizeHeader(h);
+      return names.some(name => n.includes(name) || n === name);
+    });
+  }
+
+  /**
    * Parse le texte CSV en tableau d'étudiants
    */
   private parseCsvText(csvText: string): Student[] {
-    const lines = csvText.split('\n').map(line => line.trim()).filter(line => line.length > 0);
-    
+    const lines = csvText
+      .split(/\r?\n/)
+      .map(line => line.trim())
+      .filter(line => line.length > 0);
+
     if (lines.length === 0) {
       throw new Error('Le fichier CSV est vide');
     }
 
-    const students: Student[] = [];
-    let startIndex = 0;
-    let sexeColumnIndex = -1; // Index de la colonne Sexe si elle existe
+    const delimiter = this.detectDelimiter(lines[0]);
+    const headerValues = this.parseLineValues(lines[0], delimiter);
+    const firstLineLower = lines[0].toLowerCase();
 
-    // Vérifier si la première ligne est un en-tête et détecter la colonne Sexe
-    const firstLine = lines[0].toLowerCase();
-    if (firstLine.includes('nom') || firstLine.includes('prénom') || firstLine.includes('téléphone') || firstLine.includes('telephone') || firstLine.includes('sexe')) {
+    const hasHeader =
+      firstLineLower.includes('nom') ||
+      firstLineLower.includes('prenom') ||
+      firstLineLower.includes('prénom') ||
+      firstLineLower.includes('telephone') ||
+      firstLineLower.includes('téléphone') ||
+      firstLineLower.includes('sexe') ||
+      firstLineLower.includes('tel');
+
+    let startIndex = 0;
+    let nomColumnIndex = 0;
+    let prenomColumnIndex = 1;
+    let telephoneColumnIndex = 2;
+    let sexeColumnIndex = -1;
+
+    if (hasHeader) {
       startIndex = 1;
-      
-      // Trouver l'index de la colonne Sexe
-      const headerValues = this.parseLineValues(lines[0]);
-      sexeColumnIndex = headerValues.findIndex(h => h.toLowerCase() === 'sexe');
+
+      nomColumnIndex = this.findColumnIndex(headerValues, ['nom']);
+      if (nomColumnIndex < 0) nomColumnIndex = 0;
+
+      prenomColumnIndex = this.findColumnIndex(headerValues, ['prenom', 'prénom', 'prnom']);
+      if (prenomColumnIndex < 0) prenomColumnIndex = 1;
+
+      telephoneColumnIndex = this.findColumnIndex(headerValues, ['telephone', 'téléphone', 'tel', 'télphone', 'phone']);
+      if (telephoneColumnIndex < 0) telephoneColumnIndex = 2;
+
+      sexeColumnIndex = this.findColumnIndex(headerValues, ['sexe']);
     }
 
-    // Parser chaque ligne
+    const students: Student[] = [];
+
     for (let i = startIndex; i < lines.length; i++) {
-      const line = lines[i];
-      const student = this.parseCsvLine(line, i - startIndex + 1, sexeColumnIndex);
+      const values = this.parseLineValues(lines[i], delimiter);
+      const student = this.parseCsvLine(
+        values,
+        i - startIndex + 1,
+        { nomColumnIndex, prenomColumnIndex, telephoneColumnIndex, sexeColumnIndex }
+      );
       if (student) {
         students.push(student);
       }
@@ -72,63 +165,38 @@ export class CsvParserService {
   }
 
   /**
-   * Parse les valeurs d'une ligne CSV (gestion des guillemets et virgules)
+   * Parse une ligne CSV (valeurs déjà découpées)
    */
-  private parseLineValues(line: string): string[] {
-    const values: string[] = [];
-    let currentValue = '';
-    let insideQuotes = false;
+  private parseCsvLine(
+    values: string[],
+    id: number,
+    columns: { nomColumnIndex: number; prenomColumnIndex: number; telephoneColumnIndex: number; sexeColumnIndex: number }
+  ): Student | null {
+    const nom = (values[columns.nomColumnIndex] || '').trim();
+    const prenom = (values[columns.prenomColumnIndex] || '').trim();
+    const telephone = (values[columns.telephoneColumnIndex] || '').trim();
 
-    for (let i = 0; i < line.length; i++) {
-      const char = line[i];
-      
-      if (char === '"') {
-        insideQuotes = !insideQuotes;
-      } else if (char === ',' && !insideQuotes) {
-        values.push(currentValue.trim());
-        currentValue = '';
-      } else {
-        currentValue += char;
-      }
-    }
-    values.push(currentValue.trim());
-
-    // Nettoyer les guillemets des valeurs
-    return values.map(v => v.replace(/^"|"$/g, '').trim());
-  }
-
-  /**
-   * Parse une ligne CSV individuelle
-   * Format attendu : nom,prénom,téléphone[,sexe]
-   * @param sexeColumnIndex Index de la colonne Sexe (-1 si non présente)
-   */
-  private parseCsvLine(line: string, id: number, sexeColumnIndex: number = -1): Student | null {
-    const cleanedValues = this.parseLineValues(line);
-
-    if (cleanedValues.length < 2) {
-      console.warn(`Ligne ${id} ignorée : format invalide (${line})`);
+    if (values.length <= Math.max(columns.nomColumnIndex, columns.prenomColumnIndex)) {
       return null;
     }
 
-    const nom = cleanedValues[0] || '';
-    const prenom = cleanedValues[1] || '';
-    const telephone = cleanedValues[2] || '';
-
-    // Construire le nom complet
     const nomComplet = `${prenom} ${nom}`.trim() || `${nom} ${prenom}`.trim();
-    
+
     if (!nomComplet) {
-      console.warn(`Ligne ${id} ignorée : nom vide`);
       return null;
     }
 
-    // Déterminer le sexe : priorité à la colonne CSV si elle existe
     let sexe: 'M' | 'F';
-    if (sexeColumnIndex >= 0 && cleanedValues[sexeColumnIndex]) {
-      const sexeValue = cleanedValues[sexeColumnIndex].toUpperCase();
-      sexe = (sexeValue === 'F' || sexeValue === 'FEMININ' || sexeValue === 'FÉMININ' || sexeValue === 'FEMME') ? 'F' : 'M';
+    if (columns.sexeColumnIndex >= 0 && values[columns.sexeColumnIndex]) {
+      const sexeVal = values[columns.sexeColumnIndex].toUpperCase().trim();
+      sexe =
+        sexeVal === 'F' ||
+        sexeVal === 'FEMININ' ||
+        sexeVal === 'FÉMININ' ||
+        sexeVal === 'FEMME'
+          ? 'F'
+          : 'M';
     } else {
-      // Fallback : détection par prénom
       sexe = this.detectSexe(prenom);
     }
 
@@ -141,29 +209,21 @@ export class CsvParserService {
   }
 
   /**
-   * Détecte le sexe basé sur le prénom (approximation simple)
-   * Utilisé uniquement si la colonne Sexe n'est pas présente dans le CSV
+   * Détecte le sexe basé sur le prénom
    */
   private detectSexe(prenom: string): 'M' | 'F' {
     const prenomLower = prenom.toLowerCase();
-    
-    // Liste de prénoms féminins courants (maghrébins, français et sénégalais)
     const prenomsFeminins = [
-      // Prénoms maghrébins
       'sara', 'fatima', 'amina', 'aicha', 'khadija', 'zineb', 'salma', 'nadia',
-      // Prénoms français
       'marie', 'sophie', 'emilie', 'julie', 'laura', 'clara', 'lisa', 'anna',
-      // Prénoms sénégalais
       'fatou', 'awa', 'khoudia', 'daba', 'soda', 'marieme', 'fatim', 'aminata',
       'coumba', 'ndèye', 'ndeye', 'astou', 'mame', 'rokhaya', 'sokhna', 'bineta',
-      'khady', 'ndiaye', 'aissatou', 'oumou', 'adja', 'mariama', 'seynabou', 'yacine'
+      'khady', 'aissatou', 'oumou', 'adja', 'mariama', 'seynabou', 'yacine'
     ];
 
     if (prenomsFeminins.some(p => prenomLower.includes(p))) {
       return 'F';
     }
-
-    // Par défaut, on retourne 'M' (peut être amélioré)
     return 'M';
   }
 }
