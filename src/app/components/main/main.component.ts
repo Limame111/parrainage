@@ -1,10 +1,19 @@
-import { Component, OnInit, signal, computed, inject, ChangeDetectorRef } from '@angular/core';
+import { Component, OnInit, signal, computed, inject, ChangeDetectorRef, HostListener } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { gsap } from 'gsap';
 import { DataLoaderService, Student } from '../../services/data-loader.service';
 import { ParrainageService, ParrainageResult } from '../../services/parrainage.service';
 import { CsvParserService } from '../../services/csv-parser.service';
+
+const TIRAGE_STORAGE_KEY = 'parrainage-tirage';
+
+type UploadTarget = 'l1' | 'l2';
+
+interface SavedTirage {
+  results: ParrainageResult[];
+  zoomedCardIndex: number | null;
+}
 
 @Component({
   selector: 'app-main',
@@ -29,11 +38,13 @@ export class MainComponent implements OnInit {
   isLoading = signal(true);
   errorMessage = signal<string | null>(null);
   searchQuery = signal<string>('');
+  sortedResults = computed(() => this.sortResults(this.results()));
   filteredResults = computed(() => this.computeFilteredResults());
   showStatistics = signal(false);
   isFullscreen = signal(false);
   zoomedCardIndex = signal<number | null>(null);
   zoomActive = signal<boolean>(false); // Indique si un zoom est actif
+  cascadePending = signal(false); // Cartes masquées en attendant l'animation cascade
 
   // État pour l'upload CSV
   showUploadSection = signal(false);
@@ -41,6 +52,7 @@ export class MainComponent implements OnInit {
   uploadingL2 = signal(false);
   l1FileName = signal<string>('');
   l2FileName = signal<string>('');
+  dragTarget = signal<UploadTarget | null>(null);
 
   ngOnInit(): void {
     this.loadData();
@@ -57,6 +69,7 @@ export class MainComponent implements OnInit {
       this.filleuls.set(filleulsData);
       this.parrains.set(parrainsData);
       this.isLoading.set(false);
+      this.restoreTirage();
       
       // Animation d'entrée après le chargement
       setTimeout(() => {
@@ -67,6 +80,46 @@ export class MainComponent implements OnInit {
         error instanceof Error ? error.message : 'Erreur lors du chargement des données'
       );
       this.isLoading.set(false);
+    }
+  }
+
+  /**
+   * Sauvegarde le tirage pour qu'il survive à un rafraîchissement de la page
+   */
+  private saveTirage(): void {
+    const results = this.results();
+    if (results.length === 0) {
+      localStorage.removeItem(TIRAGE_STORAGE_KEY);
+      return;
+    }
+    const saved: SavedTirage = { results, zoomedCardIndex: this.zoomedCardIndex() };
+    try {
+      localStorage.setItem(TIRAGE_STORAGE_KEY, JSON.stringify(saved));
+    } catch {
+      // Stockage indisponible (navigation privée, quota) : le tirage reste en mémoire
+    }
+  }
+
+  /**
+   * Restaure le dernier tirage sauvegardé (affiché directement, sans animation)
+   */
+  private restoreTirage(): void {
+    let saved: SavedTirage | null = null;
+    try {
+      saved = JSON.parse(localStorage.getItem(TIRAGE_STORAGE_KEY) ?? 'null');
+    } catch {
+      saved = null;
+    }
+    if (!saved || !Array.isArray(saved.results) || saved.results.length === 0) return;
+
+    this.results.set(saved.results);
+    this.showResults.set(true);
+
+    const index = saved.zoomedCardIndex;
+    if (typeof index === 'number' && index >= 0 && index < saved.results.length) {
+      this.zoomedCardIndex.set(index);
+      this.zoomActive.set(true);
+      document.body.style.overflow = 'hidden';
     }
   }
 
@@ -101,12 +154,14 @@ export class MainComponent implements OnInit {
       );
 
       this.results.set(parrainageResults);
+      this.saveTirage();
       
       // Attendre un court instant pour l'animation de suspense
       await new Promise(resolve => setTimeout(resolve, 1500));
       
       // Afficher les résultats
       this.isProcessing.set(false);
+      this.cascadePending.set(true);
       this.showResults.set(true);
       
       // Lancer l'animation cascade après un court délai pour que le DOM soit prêt
@@ -142,6 +197,7 @@ export class MainComponent implements OnInit {
         });
       }
     });
+    this.cascadePending.set(false);
 
     // Animer chaque carte une par une en cascade
     results.forEach((_, index) => {
@@ -261,6 +317,8 @@ export class MainComponent implements OnInit {
     this.showStatistics.set(false);
     this.zoomedCardIndex.set(null);
     this.zoomActive.set(false);
+    this.cascadePending.set(false);
+    localStorage.removeItem(TIRAGE_STORAGE_KEY);
     // Restaurer le scroll
     document.body.style.overflow = '';
   }
@@ -297,26 +355,31 @@ export class MainComponent implements OnInit {
   }
 
   /**
-   * Calcule les résultats filtrés et triés (utilisé par le computed)
+   * Ordre d'affichage : alphabétique par filleul, marraines spéciales en fin de liste
    */
-  private computeFilteredResults(): ParrainageResult[] {
-    const query = this.normalizeForSearch(this.searchQuery());
-    const results = this.results();
-
-    const filtered = query
-      ? results.filter(result =>
-          this.normalizeForSearch(result.filleul.nom).includes(query) ||
-          this.normalizeForSearch(result.parrain.nom).includes(query)
-        )
-      : results;
-
-    return [...filtered].sort((a, b) => {
+  private sortResults(results: ParrainageResult[]): ParrainageResult[] {
+    return [...results].sort((a, b) => {
       const aSpecial = this.isMarraineSpecial(a);
       const bSpecial = this.isMarraineSpecial(b);
       if (aSpecial && !bSpecial) return 1;   // a en fin
       if (!aSpecial && bSpecial) return -1;  // b en fin
       return a.filleul.nom.localeCompare(b.filleul.nom, 'fr');
     });
+  }
+
+  /**
+   * Calcule les résultats filtrés et triés (utilisé par le computed)
+   */
+  private computeFilteredResults(): ParrainageResult[] {
+    const query = this.normalizeForSearch(this.searchQuery());
+    const sorted = this.sortedResults();
+
+    return query
+      ? sorted.filter(result =>
+          this.normalizeForSearch(result.filleul.nom).includes(query) ||
+          this.normalizeForSearch(result.parrain.nom).includes(query)
+        )
+      : sorted;
   }
 
   getFilteredResults(): ParrainageResult[] {
@@ -354,7 +417,7 @@ export class MainComponent implements OnInit {
    * Copie les résultats dans le presse-papier
    */
   async copyToClipboard(): Promise<void> {
-    const results = this.results();
+    const results = this.sortedResults();
     let text = '🎓 Résultats du Parrainage - Section Informatique\n';
     text += '='.repeat(50) + '\n\n';
     
@@ -374,14 +437,15 @@ export class MainComponent implements OnInit {
    * Télécharge les résultats en CSV
    */
   downloadCSV(): void {
-    const results = this.results();
-    let csv = 'Filleul,Parrain/Marraine,Sexe\n';
+    const results = this.sortedResults();
+    let csv = 'N°,Filleul,Parrain/Marraine,Sexe,Téléphone\n';
     
-    results.forEach(result => {
-      csv += `"${result.filleul.nom}","${result.parrain.nom}","${result.parrain.sexe}"\n`;
+    results.forEach((result, index) => {
+      csv += `${index + 1},"${result.filleul.nom}","${result.parrain.nom}","${result.parrain.sexe}","${result.parrain.telephone ?? ''}"\n`;
     });
 
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    // BOM UTF-8 pour qu'Excel affiche correctement les accents
+    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
     const url = URL.createObjectURL(blob);
     
@@ -394,6 +458,111 @@ export class MainComponent implements OnInit {
     URL.revokeObjectURL(url);
     
     this.showSuccessMessage('✅ Fichier CSV téléchargé !');
+  }
+
+  /**
+   * Télécharge la liste des parrainages en PDF (même ordre et mêmes numéros qu'à l'écran)
+   */
+  async downloadPDF(): Promise<void> {
+    const results = this.sortedResults();
+    if (results.length === 0) return;
+
+    try {
+      const [{ jsPDF }, { autoTable }] = await Promise.all([
+        import('jspdf'),
+        import('jspdf-autotable')
+      ]);
+
+      const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const pageHeight = doc.internal.pageSize.getHeight();
+      const margin = 14;
+      const today = new Date();
+      const dateLabel = today.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });
+      const stats = this.getStatistics();
+
+      // Bandeau d'en-tête
+      doc.setFillColor(59, 130, 246);
+      doc.rect(0, 0, pageWidth, 38, 'F');
+      doc.setFillColor(139, 92, 246);
+      doc.rect(0, 38, pageWidth, 2.5, 'F');
+
+      doc.setTextColor(255, 255, 255);
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(22);
+      doc.text('Parrainage - Section Informatique', margin, 18);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(11);
+      doc.text(`Journée d'intégration  ·  Liste officielle L1 / L2  ·  ${dateLabel}`, margin, 28);
+
+      // Résumé
+      doc.setTextColor(71, 85, 105);
+      doc.setFontSize(10.5);
+      doc.text(
+        `${stats.totalFilleuls} filleul(e)s  ·  ${stats.totalParrains} parrains et marraines`,
+        margin,
+        51
+      );
+
+      autoTable(doc, {
+        startY: 57,
+        margin: { left: margin, right: margin, bottom: 18 },
+        head: [['N°', 'Filleul(e) - L1', 'Parrain / Marraine - L2', 'Rôle', 'Téléphone']],
+        body: results.map((result, index) => [
+          String(index + 1),
+          result.filleul.nom,
+          result.parrain.nom,
+          this.getParrainLabel(result.parrain.sexe),
+          result.parrain.telephone || '-'
+        ]),
+        theme: 'grid',
+        styles: {
+          font: 'helvetica',
+          fontSize: 10,
+          cellPadding: { top: 3.2, bottom: 3.2, left: 3, right: 3 },
+          textColor: [30, 41, 59],
+          lineColor: [226, 232, 240],
+          lineWidth: 0.2,
+          valign: 'middle'
+        },
+        headStyles: {
+          fillColor: [30, 41, 59],
+          textColor: [255, 255, 255],
+          fontStyle: 'bold',
+          fontSize: 10
+        },
+        alternateRowStyles: { fillColor: [241, 245, 249] },
+        columnStyles: {
+          0: { halign: 'center', cellWidth: 13, fontStyle: 'bold', textColor: [59, 130, 246] },
+          1: { fontStyle: 'bold' },
+          3: { halign: 'center', cellWidth: 22, fontSize: 9, fontStyle: 'bold' },
+          4: { cellWidth: 32 }
+        },
+        didParseCell: data => {
+          if (data.section === 'body' && data.column.index === 3) {
+            data.cell.styles.textColor = data.cell.raw === 'Marraine' ? [219, 39, 119] : [6, 132, 162];
+          }
+        }
+      });
+
+      // Pied de page sur chaque page
+      const pageCount = doc.getNumberOfPages();
+      for (let page = 1; page <= pageCount; page++) {
+        doc.setPage(page);
+        doc.setDrawColor(226, 232, 240);
+        doc.line(margin, pageHeight - 12, pageWidth - margin, pageHeight - 12);
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(8.5);
+        doc.setTextColor(100, 116, 139);
+        doc.text('Section Informatique - Parrainage L1 / L2', margin, pageHeight - 7);
+        doc.text(`Page ${page} / ${pageCount}`, pageWidth - margin, pageHeight - 7, { align: 'right' });
+      }
+
+      doc.save(`parrainage_${today.toISOString().split('T')[0]}.pdf`);
+      this.showSuccessMessage('✅ Liste PDF téléchargée !');
+    } catch {
+      this.errorMessage.set('Erreur lors de la génération du PDF');
+    }
   }
 
   /**
@@ -411,6 +580,11 @@ export class MainComponent implements OnInit {
         this.isFullscreen.set(false);
       });
     }
+  }
+
+  @HostListener('document:fullscreenchange')
+  onFullscreenChange(): void {
+    this.isFullscreen.set(!!document.fullscreenElement);
   }
 
   /**
@@ -474,22 +648,12 @@ export class MainComponent implements OnInit {
     // Marquer le zoom comme actif
     this.zoomActive.set(true);
     
-    // Bloquer le scroll
+    // Bloquer le scroll (l'overlay est fixe : la position dans la liste est conservée)
     document.body.style.overflow = 'hidden';
-    
-    // Scroll instantané vers le haut
-    window.scrollTo(0, 0);
     
     // Afficher la carte immédiatement
     this.zoomedCardIndex.set(index);
-    
-    // S'assurer que la carte est visible après un court délai
-    setTimeout(() => {
-      const card = document.querySelector('.zoomed-card');
-      if (card) {
-        card.scrollIntoView({ behavior: 'instant', block: 'center', inline: 'center' });
-      }
-    }, 50);
+    this.saveTirage();
   }
 
   /**
@@ -504,6 +668,7 @@ export class MainComponent implements OnInit {
     // Fermer le zoom
     this.zoomedCardIndex.set(null);
     this.zoomActive.set(false);
+    this.saveTirage();
     
     // Restaurer le scroll
     document.body.style.overflow = '';
@@ -517,6 +682,16 @@ export class MainComponent implements OnInit {
     if (index === null) return null;
     const results = this.results();
     return results[index] || null;
+  }
+
+  /**
+   * Numéro affiché sur la carte zoomée (identique à celui de la carte dans la liste)
+   */
+  getZoomedCardNumber(): number {
+    const zoomed = this.getZoomedCard();
+    if (!zoomed) return 0;
+    const position = this.filteredResults().indexOf(zoomed);
+    return position >= 0 ? position + 1 : (this.zoomedCardIndex() ?? 0) + 1;
   }
 
   /**
@@ -539,78 +714,75 @@ export class MainComponent implements OnInit {
   }
 
   /**
-   * Gère l'upload du fichier CSV pour L1 (Filleuls)
+   * Gère la sélection d'un fichier CSV via le sélecteur de fichiers
    */
-  async onL1FileSelected(event: Event): Promise<void> {
+  async onFileSelected(event: Event, target: UploadTarget): Promise<void> {
     const input = event.target as HTMLInputElement;
     const file = input.files?.[0];
-    
-    if (!file) return;
-
-    if (!file.name.toLowerCase().endsWith('.csv') && !file.name.toLowerCase().endsWith('.txt')) {
-      this.errorMessage.set('⚠️ Veuillez sélectionner un fichier CSV ou TXT');
-      return;
+    // Réinitialiser l'input pour permettre de recharger le même fichier
+    input.value = '';
+    if (file) {
+      await this.importCsv(file, target);
     }
+  }
 
-    this.uploadingL1.set(true);
-    this.l1FileName.set(file.name);
-    this.errorMessage.set(null);
+  onDragOver(event: DragEvent, target: UploadTarget): void {
+    event.preventDefault();
+    this.dragTarget.set(target);
+  }
 
-    try {
-      const students = await this.csvParser.parseCsvFile(file);
-      this.filleuls.set(students);
-      this.showSuccessMessage(`✅ ${students.length} filleul(s) chargé(s) depuis ${file.name}`);
-      
-      // Réinitialiser les résultats si le parrainage a déjà été fait
-      if (this.showResults()) {
-        this.reset();
-      }
-    } catch (error) {
-      this.errorMessage.set(
-        error instanceof Error ? error.message : 'Erreur lors du chargement du fichier L1'
-      );
-    } finally {
-      this.uploadingL1.set(false);
-      // Réinitialiser l'input pour permettre de recharger le même fichier
-      input.value = '';
+  onDragLeave(event: DragEvent): void {
+    const zone = event.currentTarget as HTMLElement;
+    if (zone.contains(event.relatedTarget as Node | null)) return;
+    this.dragTarget.set(null);
+  }
+
+  async onDrop(event: DragEvent, target: UploadTarget): Promise<void> {
+    event.preventDefault();
+    this.dragTarget.set(null);
+    const file = event.dataTransfer?.files?.[0];
+    if (file) {
+      await this.importCsv(file, target);
     }
   }
 
   /**
-   * Gère l'upload du fichier CSV pour L2 (Parrains)
+   * Charge un fichier CSV dans la liste L1 (filleuls) ou L2 (parrains)
    */
-  async onL2FileSelected(event: Event): Promise<void> {
-    const input = event.target as HTMLInputElement;
-    const file = input.files?.[0];
-    
-    if (!file) return;
+  private async importCsv(file: File, target: UploadTarget): Promise<void> {
+    const isL1 = target === 'l1';
+    const uploading = isL1 ? this.uploadingL1 : this.uploadingL2;
+    const fileName = isL1 ? this.l1FileName : this.l2FileName;
+    const list = isL1 ? this.filleuls : this.parrains;
 
-    if (!file.name.toLowerCase().endsWith('.csv') && !file.name.toLowerCase().endsWith('.txt')) {
+    if (uploading()) return;
+
+    if (!/\.(csv|txt)$/i.test(file.name)) {
       this.errorMessage.set('⚠️ Veuillez sélectionner un fichier CSV ou TXT');
       return;
     }
 
-    this.uploadingL2.set(true);
-    this.l2FileName.set(file.name);
+    uploading.set(true);
+    fileName.set(file.name);
     this.errorMessage.set(null);
 
     try {
       const students = await this.csvParser.parseCsvFile(file);
-      this.parrains.set(students);
-      this.showSuccessMessage(`✅ ${students.length} parrain(s)/marraine(s) chargé(s) depuis ${file.name}`);
+      list.set(students);
+      const label = isL1 ? 'filleul(s)' : 'parrain(s)/marraine(s)';
+      this.showSuccessMessage(`✅ ${students.length} ${label} chargé(s) depuis ${file.name}`);
       
       // Réinitialiser les résultats si le parrainage a déjà été fait
       if (this.showResults()) {
         this.reset();
       }
     } catch (error) {
+      fileName.set('');
       this.errorMessage.set(
-        error instanceof Error ? error.message : 'Erreur lors du chargement du fichier L2'
+        error instanceof Error ? error.message : `Erreur lors du chargement du fichier ${isL1 ? 'L1' : 'L2'}`
       );
     } finally {
-      this.uploadingL2.set(false);
-      // Réinitialiser l'input pour permettre de recharger le même fichier
-      input.value = '';
+      uploading.set(false);
     }
   }
 }

@@ -18,6 +18,13 @@
               "zone.js"
             ],
             "tsConfig": "tsconfig.app.json",
+            "allowedCommonJsDependencies": [
+              "canvg",
+              "core-js",
+              "raf",
+              "rgbcolor",
+              "html2canvas"
+            ],
             "assets": [
               {
                 "glob": "**/*",

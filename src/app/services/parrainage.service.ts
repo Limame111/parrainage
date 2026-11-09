@@ -31,34 +31,23 @@ export class ParrainageService {
 
     const norm = (s: string) => s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 
-    // Parrainages forcés : marraines avec filleules (sexe F)
+    // Marraines avec une seule filleule (sexe F), tirée au sort
     const marrainesAvecFilleule: { parrain: Student; filleul: Student }[] = [];
 
-    // Ndeye Fatou Sall = marraine de Rabiyatou Deguene (priorité absolue)
     const ndeyeFatouSall = parrains.find(p => {
       const n = norm(p.nom);
-      return (n.includes('ndeye fatou') || (n.includes('ndeye') && n.includes('fatou'))) && n.includes('sall');
+      return n.includes('ndeye') && n.includes('fatou') && n.includes('sall');
     });
-    const rabiyatou = filleuls.find(f => {
-      const n = norm(f.nom);
-      return n.includes('rabiyatou') && (n.includes('deguene') || n.includes('deguen')) && f.sexe === 'F';
-    });
-    if (ndeyeFatouSall && rabiyatou) {
-      marrainesAvecFilleule.push({ parrain: ndeyeFatouSall, filleul: rabiyatou });
-    }
-
     const khoudiaMangaDieye = parrains.find(p => norm(p.nom).includes('khoudia') && norm(p.nom).includes('manga'));
     const karineToure = parrains.find(p => norm(p.nom).includes('karine') && norm(p.nom).includes('toure'));
 
-    let filleulesF = filleuls.filter(f => f.sexe === 'F' && !marrainesAvecFilleule.some(m => m.filleul.id === f.id));
-    filleulesF = this.shuffleArray(filleulesF);
+    const filleulesF = this.shuffleArray(filleuls.filter(f => f.sexe === 'F'));
     let idxF = 0;
 
-    if (khoudiaMangaDieye && filleulesF[idxF]) {
-      marrainesAvecFilleule.push({ parrain: khoudiaMangaDieye, filleul: filleulesF[idxF++] });
-    }
-    if (karineToure && filleulesF[idxF]) {
-      marrainesAvecFilleule.push({ parrain: karineToure, filleul: filleulesF[idxF++] });
+    for (const marraine of [ndeyeFatouSall, khoudiaMangaDieye, karineToure]) {
+      if (marraine && filleulesF[idxF]) {
+        marrainesAvecFilleule.push({ parrain: marraine, filleul: filleulesF[idxF++] });
+      }
     }
 
     // Ces marraines n'auront qu'1 seule filleule (pas de 2e filleul possible)
@@ -75,7 +64,7 @@ export class ParrainageService {
     const shuffledFilleuls = this.shuffleArray(remainingFilleuls);
     const shuffledParrains = this.shuffleArray(remainingParrains);
 
-    // Compteur pour chaque parrain (ndeyeFatouSall a déjà 1 filleul si forcé)
+    // Compteur pour chaque parrain
     const parrainCounts = new Map<number, number>();
     shuffledParrains.forEach(p => parrainCounts.set(p.id, 0));
     let parrainIndex = 0;
@@ -114,46 +103,7 @@ export class ParrainageService {
       }
     }
 
-    // Correction finale : garantir Ndeye Fatou Sall = marraine de Rabiyatou Deguene
-    this.applyNdeyeFatouSallPairing(results, parrains, filleuls);
-
     return results;
-  }
-
-  /**
-   * Applique le couplage Ndeye Fatou Sall / Rabiyatou Deguene en post-traitement
-   */
-  private applyNdeyeFatouSallPairing(
-    results: ParrainageResult[],
-    parrains: Student[],
-    filleuls: Student[]
-  ): void {
-    const norm = (s: string) => s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-
-    const ndeyeFatouSall = parrains.find(p => {
-      const n = norm(p.nom);
-      return n.includes('ndeye') && n.includes('fatou') && n.includes('sall');
-    });
-    const rabiyatou = filleuls.find(f => {
-      const n = norm(f.nom);
-      return n.includes('rabiyatou') && (n.includes('deguene') || n.includes('deguen'));
-    });
-
-    if (!ndeyeFatouSall || !rabiyatou) return;
-
-    const idxRabiyatou = results.findIndex(r => r.filleul.id === rabiyatou.id);
-    const idxNdeyeFatou = results.findIndex(r => r.parrain.id === ndeyeFatouSall.id);
-
-    if (idxRabiyatou >= 0 && results[idxRabiyatou].parrain.id === ndeyeFatouSall.id) return;
-
-    if (idxRabiyatou >= 0 && idxNdeyeFatou >= 0) {
-      const ancienParrainDeRabiyatou = results[idxRabiyatou].parrain;
-      const filleulDeNdeyeFatou = results[idxNdeyeFatou].filleul;
-      results[idxRabiyatou] = { filleul: rabiyatou, parrain: ndeyeFatouSall };
-      results[idxNdeyeFatou] = { filleul: filleulDeNdeyeFatou, parrain: ancienParrainDeRabiyatou };
-    } else if (idxRabiyatou >= 0) {
-      results[idxRabiyatou] = { filleul: rabiyatou, parrain: ndeyeFatouSall };
-    }
   }
 
   /**

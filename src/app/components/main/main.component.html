@@ -29,47 +29,90 @@
     <div class="launch-section" *ngIf="!showResults()">
       <div class="launch-container glass-card">
         <!-- Section d'upload CSV -->
-        <div class="upload-section" *ngIf="showUploadSection()">
-          <h3 class="upload-title">📁 Importer les listes depuis CSV</h3>
-          <p class="upload-subtitle">Format attendu : nom,prénom,téléphone (avec ou sans en-tête)</p>
-          
-          <div class="upload-grid">
-            <div class="upload-card">
-              <label class="upload-label">
-                <span class="upload-icon">📄</span>
-                <span class="upload-text">Filleuls (L1)</span>
-                <input 
-                  type="file" 
-                  accept=".csv,.txt,text/csv,text/plain"
-                  (change)="onL1FileSelected($event)"
-                  [disabled]="uploadingL1()"
-                  class="file-input"
-                  id="l1-file-input">
-                <div class="file-input-display">
-                  <span *ngIf="!l1FileName() && !uploadingL1()">Choisir un fichier CSV</span>
-                  <span *ngIf="uploadingL1()" class="uploading">⏳ Chargement...</span>
-                  <span *ngIf="l1FileName() && !uploadingL1()" class="file-name">{{ l1FileName() }}</span>
-                </div>
-              </label>
-            </div>
+        <div
+          class="upload-section"
+          [class.open]="showUploadSection()"
+          [attr.inert]="showUploadSection() ? null : ''"
+          [attr.aria-hidden]="!showUploadSection()">
+          <div class="upload-inner">
+            <div class="upload-content">
+              <div class="upload-heading">
+                <h3 class="upload-title">Importer les listes</h3>
+                <p class="upload-subtitle">
+                  Un fichier CSV par promotion, avec ou sans en-tête :
+                  <span class="format-chip">nom</span>
+                  <span class="format-chip">prénom</span>
+                  <span class="format-chip">téléphone</span>
+                </p>
+              </div>
 
-            <div class="upload-card">
-              <label class="upload-label">
-                <span class="upload-icon">📄</span>
-                <span class="upload-text">Parrains/Marraines (L2)</span>
-                <input 
-                  type="file" 
-                  accept=".csv,.txt,text/csv,text/plain"
-                  (change)="onL2FileSelected($event)"
-                  [disabled]="uploadingL2()"
-                  class="file-input"
-                  id="l2-file-input">
-                <div class="file-input-display">
-                  <span *ngIf="!l2FileName() && !uploadingL2()">Choisir un fichier CSV</span>
-                  <span *ngIf="uploadingL2()" class="uploading">⏳ Chargement...</span>
-                  <span *ngIf="l2FileName() && !uploadingL2()" class="file-name">{{ l2FileName() }}</span>
-                </div>
-              </label>
+              <div class="upload-grid">
+                <label
+                  class="dropzone dropzone-l1"
+                  [class.dragging]="dragTarget() === 'l1'"
+                  [class.busy]="uploadingL1()"
+                  [class.loaded]="l1FileName() && !uploadingL1()"
+                  (dragover)="onDragOver($event, 'l1')"
+                  (dragleave)="onDragLeave($event)"
+                  (drop)="onDrop($event, 'l1')">
+                  <input
+                    type="file"
+                    accept=".csv,.txt,text/csv,text/plain"
+                    (change)="onFileSelected($event, 'l1')"
+                    [disabled]="uploadingL1()"
+                    class="file-input"
+                    id="l1-file-input">
+                  <span class="dropzone-badge">L1</span>
+                  <span class="dropzone-icon">
+                    <span *ngIf="uploadingL1()" class="dropzone-spinner"></span>
+                    <span *ngIf="!uploadingL1()" class="dropzone-glyph">{{ l1FileName() ? '✓' : '↑' }}</span>
+                  </span>
+                  <span class="dropzone-title">Filleuls</span>
+                  <span class="dropzone-hint" *ngIf="uploadingL1()">Lecture du fichier…</span>
+                  <ng-container *ngIf="!uploadingL1()">
+                    <span class="dropzone-hint" *ngIf="!l1FileName()">
+                      Glisse ton fichier ici ou <span class="dropzone-link">parcours</span>
+                    </span>
+                    <ng-container *ngIf="l1FileName()">
+                      <span class="dropzone-file">{{ l1FileName() }}</span>
+                      <span class="dropzone-hint">{{ filleuls().length }} filleul(s) · cliquer pour remplacer</span>
+                    </ng-container>
+                  </ng-container>
+                </label>
+
+                <label
+                  class="dropzone dropzone-l2"
+                  [class.dragging]="dragTarget() === 'l2'"
+                  [class.busy]="uploadingL2()"
+                  [class.loaded]="l2FileName() && !uploadingL2()"
+                  (dragover)="onDragOver($event, 'l2')"
+                  (dragleave)="onDragLeave($event)"
+                  (drop)="onDrop($event, 'l2')">
+                  <input
+                    type="file"
+                    accept=".csv,.txt,text/csv,text/plain"
+                    (change)="onFileSelected($event, 'l2')"
+                    [disabled]="uploadingL2()"
+                    class="file-input"
+                    id="l2-file-input">
+                  <span class="dropzone-badge">L2</span>
+                  <span class="dropzone-icon">
+                    <span *ngIf="uploadingL2()" class="dropzone-spinner"></span>
+                    <span *ngIf="!uploadingL2()" class="dropzone-glyph">{{ l2FileName() ? '✓' : '↑' }}</span>
+                  </span>
+                  <span class="dropzone-title">Parrains / Marraines</span>
+                  <span class="dropzone-hint" *ngIf="uploadingL2()">Lecture du fichier…</span>
+                  <ng-container *ngIf="!uploadingL2()">
+                    <span class="dropzone-hint" *ngIf="!l2FileName()">
+                      Glisse ton fichier ici ou <span class="dropzone-link">parcours</span>
+                    </span>
+                    <ng-container *ngIf="l2FileName()">
+                      <span class="dropzone-file">{{ l2FileName() }}</span>
+                      <span class="dropzone-hint">{{ parrains().length }} parrain(s) · cliquer pour remplacer</span>
+                    </ng-container>
+                  </ng-container>
+                </label>
+              </div>
             </div>
           </div>
         </div>
@@ -87,11 +130,13 @@
 
         <div class="action-section">
           <button 
-            class="btn-secondary"
-            (click)="toggleUploadSection()"
-            style="margin-right: var(--spacing-md);">
-            <span *ngIf="!showUploadSection()">📁 Importer CSV</span>
-            <span *ngIf="showUploadSection()">✕ Masquer</span>
+            class="btn-secondary upload-toggle"
+            [class.active]="showUploadSection()"
+            [attr.aria-expanded]="showUploadSection()"
+            (click)="toggleUploadSection()">
+            <span class="upload-toggle-icon">📁</span>
+            <span>{{ showUploadSection() ? 'Masquer l\'import' : 'Importer CSV' }}</span>
+            <span class="upload-toggle-chevron">⌄</span>
           </button>
           <button 
             class="btn-primary launch-button"
@@ -105,7 +150,7 @@
           </button>
         </div>
 
-        <div class="error-message" *ngIf="errorMessage()">
+        <div class="error-message" [class.success]="errorMessage()?.startsWith('✅')" *ngIf="errorMessage()">
           <span class="error-icon">{{ errorMessage()?.startsWith('✅') ? '✅' : '⚠️' }}</span>
           {{ errorMessage() }}
         </div>
@@ -133,10 +178,17 @@
           <button class="btn-icon" (click)="downloadCSV()" title="Télécharger CSV">
             💾
           </button>
+          <button class="btn-primary btn-pdf" (click)="downloadPDF()" title="Télécharger la liste en PDF">
+            📄 Télécharger PDF
+          </button>
           <button class="btn-secondary" (click)="reset()">
             ↻ Nouveau
           </button>
         </div>
+      </div>
+
+      <div class="error-message" [class.success]="errorMessage()?.startsWith('✅')" *ngIf="errorMessage()">
+        {{ errorMessage() }}
       </div>
 
       <!-- Barre de recherche -->
@@ -192,7 +244,7 @@
         </div>
       </div>
 
-      <div class="results-container">
+      <div class="results-container" [class.cascade-pending]="cascadePending()">
         <div 
           *ngFor="let result of filteredResults(); let i = index"
           class="result-card glass-card"
@@ -246,7 +298,7 @@
       </button>
       
       <div class="zoomed-card-header">
-        <div class="zoomed-card-number">{{ (zoomedCardIndex() ?? 0) + 1 }}</div>
+        <div class="zoomed-card-number">{{ getZoomedCardNumber() }}</div>
       </div>
 
       <div class="zoomed-card-body">
